@@ -1,14 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="640" height="280" viewBox="0 0 640 280" role="img" aria-labelledby="title desc">
 <title id="title">My Pydle Plays</title>
-<desc id="desc">Hard: 9, Easy only: 10, Broken: 2, Incomplete: 212</desc>
+<desc id="desc">Hard: 11, Easy only: 11, Broken: 2, Incomplete: 209</desc>
 <rect width="640" height="280" rx="18" fill="#0f172a"/>
 <text x="280" y="60" font-family="sans-serif" font-size="24" fill="white">My Pydle Plays</text>
-<path d="M 140 140 L 140.0000 40.0000 A 100 100 0 0 1 164.0323 42.9307 Z" fill="#3b82f6"/>
-<circle cx="290" cy="95" r="6" fill="#3b82f6"/><text x="308" y="100" font-family="sans-serif" font-size="16" fill="white">Hard: 9</text>
-<path d="M 140 140 L 164.0323 42.9307 A 100 100 0 0 1 189.0238 52.8411 Z" fill="#22c55e"/>
-<circle cx="290" cy="125" r="6" fill="#22c55e"/><text x="308" y="130" font-family="sans-serif" font-size="16" fill="white">Easy only: 10</text>
-<path d="M 140 140 L 189.0238 52.8411 A 100 100 0 0 1 193.6510 55.6106 Z" fill="#eab308"/>
+<path d="M 140 140 L 140.0000 40.0000 A 100 100 0 0 1 169.2300 44.3673 Z" fill="#3b82f6"/>
+<circle cx="290" cy="95" r="6" fill="#3b82f6"/><text x="308" y="100" font-family="sans-serif" font-size="16" fill="white">Hard: 11</text>
+<path d="M 140 140 L 169.2300 44.3673 A 100 100 0 0 1 195.9069 57.0879 Z" fill="#22c55e"/>
+<circle cx="290" cy="125" r="6" fill="#22c55e"/><text x="308" y="130" font-family="sans-serif" font-size="16" fill="white">Easy only: 11</text>
+<path d="M 140 140 L 195.9069 57.0879 A 100 100 0 0 1 200.2951 60.2222 Z" fill="#eab308"/>
 <circle cx="290" cy="155" r="6" fill="#eab308"/><text x="308" y="160" font-family="sans-serif" font-size="16" fill="white">Broken: 2</text>
-<path d="M 140 140 L 193.6510 55.6106 A 100 100 0 1 1 140.0000 40.0000 Z" fill="#ef4444"/>
-<circle cx="290" cy="185" r="6" fill="#ef4444"/><text x="308" y="190" font-family="sans-serif" font-size="16" fill="white">Incomplete: 212</text>
-<text x="280" y="240" font-family="sans-serif" font-size="16" fill="#cbd5e1">8.2% completed</text></svg>
+<path d="M 140 140 L 200.2951 60.2222 A 100 100 0 1 1 140.0000 40.0000 Z" fill="#ef4444"/>
+<circle cx="290" cy="185" r="6" fill="#ef4444"/><text x="308" y="190" font-family="sans-serif" font-size="16" fill="white">Incomplete: 209</text>
+<text x="280" y="240" font-family="sans-serif" font-size="16" fill="#cbd5e1">9.4% completed</text></svg>
