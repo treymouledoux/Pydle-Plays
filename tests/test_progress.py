@@ -30,6 +30,7 @@ class ProgressTests(unittest.TestCase):
                 Path(directory, name).write_text(code)
             results = game_results(Path(directory))
             self.assertEqual(results[1]['best'], 124)
+            self.assertEqual(results[1]['file'], '#1 Multiple.py')
             self.assertEqual(results[2]['best'], 125)
             self.assertEqual([results[i]['status'] for i in range(1, 7)],
                              ['Hard', 'Easy only', 'Unattempted', 'Broken', 'Unattempted', 'Easy only'])
@@ -39,8 +40,9 @@ class ProgressTests(unittest.TestCase):
             self.assertIn('**3 / 7 games completed**', block)
             self.assertIn('**6 attempted**', block)
             self.assertIn('**1 broken**', block)
-            self.assertIn('Average best score: 166.0 characters', block)
+            self.assertIn('Average score: 166.0 characters', block)
             self.assertNotIn('| Game |', block)
+            self.assertIn('**Best score:** 124 characters / [#1 Multiple.py](games/%231%20Multiple.py)', block)
             import xml.etree.ElementTree as ET
             chart = chart_svg(counts)
             ET.fromstring(chart)

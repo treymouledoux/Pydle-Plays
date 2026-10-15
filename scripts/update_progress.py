@@ -5,6 +5,7 @@ import math
 import os
 from pathlib import Path
 import re
+from urllib.parse import quote
 
 ROOT = Path(__file__).resolve().parents[1]
 START = "<!-- pydle-progress:start -->"
@@ -44,6 +45,7 @@ def game_results(directory):
             score = int(section[1])
             if game["best"] is None or score < game["best"]:
                 game["best"] = score
+                game["file"] = path.name
     for game in results.values():
         score = game["best"]
         game["status"] = "Hard" if score is not None and score < 125 else "Easy only" if score is not None and score < 250 else "Broken" if game["broken"] else "Unattempted"
@@ -229,11 +231,22 @@ def progress_block(results, total, pending=False):
     scores = [result["best"] for result in results.values()
               if result["status"] in ("Hard", "Easy only")]
     average = f"{sum(scores) / len(scores):.1f}" if scores else "—"
+    best = "—"
+    if scores:
+        number, result = min(
+            ((number, result) for number, result in results.items()
+             if result["status"] in ("Hard", "Easy only")),
+            key=lambda item: (item[1]["best"], item[0]))
+        filename = result.get("file")
+        label = filename.replace('[', '\\[').replace(']', '\\]') if filename else ''
+        source = f"[{label}]({quote('games/' + filename, safe='/')})" if filename else f"#{number}"
+        best = f"{result['best']} characters / {source}"
     note = "\n\nArchive percentage and remaining unattempted games will appear after the first successful update." if pending else ""
     return (f"{START}\n{summary} · **{attempted} attempted**\n\n"
             f"**{counts['Hard']} hard** · **{counts['Easy only']} easy only** · "
             f"**{counts['Broken']} broken** · **{counts['Unattempted']} unattempted**\n\n"
-            f"**Average best score: {average} characters** across completed games\n\n{chart}{note}\n{END}")
+            f"**Average score: {average} characters** across completed games\n\n"
+            f"**Best score:** {best}\n\n{chart}{note}\n{END}")
 
 
 def chart_svg(counts, pending=False):
