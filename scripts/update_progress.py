@@ -73,26 +73,33 @@ def result_counts(results, available):
     return counts
 
 
+async def dialog_surface(dialog):
+    # Headless UI's role=dialog wrapper can have zero height; its fixed panel is visible.
+    panel = dialog.locator('[id^="headlessui-dialog-panel-"]')
+    return panel.first if await panel.count() else dialog
+
+
 async def dismiss_startup_dialogs(page):
     """Headless UI dialogs cover the menu on a browser's first visit."""
     dialogs = page.locator('[role="dialog"]')
     for _ in range(5):
         visible = [dialogs.nth(i) for i in range(await dialogs.count())
-                   if await dialogs.nth(i).is_visible()]
+                   if await (await dialog_surface(dialogs.nth(i))).is_visible()]
         if not visible:
             return
         dialog = visible[-1]
+        surface = await dialog_surface(dialog)
         if await dialog.get_by_role("heading", name=re.compile("Puzzle Archive", re.I)).count():
             return
         print("Dismissing startup dialog:", (await dialog.inner_text())[:500])
         if await dialog.get_by_role("heading", name="How to play Pydle", exact=True).count():
             # The captured page has one unlabeled button inside this dialog: X.
             await dialog.locator('button:not([data-headlessui-focus-guard])').click(timeout=5000)
-            await dialog.wait_for(state="hidden", timeout=5000)
+            await surface.wait_for(state="hidden", timeout=5000)
             continue
         await page.keyboard.press("Escape")
         try:
-            await dialog.wait_for(state="hidden", timeout=2000)
+            await surface.wait_for(state="hidden", timeout=2000)
             continue
         except Exception:
             close = dialog.get_by_role("button", name=re.compile(r"close|dismiss|got it|start|okay|^ok$", re.I))
@@ -101,7 +108,7 @@ async def dismiss_startup_dialogs(page):
             if not await close.count():
                 raise ValueError("Startup dialog could not be dismissed; see scraper diagnostics.")
             await close.first.click(timeout=5000)
-            await dialog.wait_for(state="hidden", timeout=5000)
+            await surface.wait_for(state="hidden", timeout=5000)
     raise ValueError("Too many startup dialogs; see scraper diagnostics.")
 
 
@@ -137,7 +144,8 @@ async def fetch_archive():
                 page.locator('button, a, [role="button"]').filter(
                     has=page.locator('svg title').filter(has_text=re.compile("archive", re.I))),
             ]
-            dialog = page.get_by_role("dialog", name=re.compile("Puzzle Archive", re.I))
+            dialog = page.locator('[role="dialog"]').filter(
+                has=page.get_by_role("heading", name=re.compile("Puzzle Archive", re.I)))
             menu_candidates = [
                 page.get_by_role("button", name=re.compile("menu|navigation", re.I)),
                 page.locator('button[title*="menu" i], button[aria-haspopup="menu"], button[aria-controls*="menu" i]'),
@@ -146,7 +154,7 @@ async def fetch_archive():
             menu_opened = False
             for _ in range(30):
                 await dismiss_startup_dialogs(page)
-                if await dialog.count() and await dialog.first.is_visible():
+                if await dialog.count() and await (await dialog_surface(dialog.first)).is_visible():
                     break
                 clicked = False
                 for candidate in candidates:
@@ -159,7 +167,7 @@ async def fetch_archive():
                     if clicked:
                         break
                 if clicked:
-                    await dialog.first.wait_for(state="visible")
+                    await dialog.first.get_by_role("heading", name=re.compile("Puzzle Archive", re.I)).wait_for(state="visible")
                     break
                 if not menu_opened:
                     for candidate in menu_candidates:
@@ -172,32 +180,9 @@ async def fetch_archive():
                         if menu_opened:
                             break
                 await page.wait_for_timeout(500)
-            await dialog.first.wait_for(state="visible", timeout=10000)
+            await dialog.first.get_by_role("heading", name=re.compile("Puzzle Archive", re.I)).wait_for(state="visible", timeout=10000)
             archive = dialog.first
-            entries = archive.get_by_role("button").filter(has_text=re.compile(r"Pydle\s*#\s*\d+", re.I))
-            await entries.first.wait_for(state="visible")
-            # Read only archive entries, excluding the current game's header.
-            # Accumulate IDs to support lists that discard offscreen rows.
-            seen = set()
-            previous = None
-            stable = 0
-            for _ in range(100):
-                seen.update(archive_ids("\n".join(await entries.all_text_contents())))
-                metrics = await archive.evaluate("""element => {
-                    const scrollable = [...element.querySelectorAll('*')].filter(e =>
-                        e.scrollHeight > e.clientHeight &&
-                        /auto|scroll/.test(getComputedStyle(e).overflowY));
-                    for (const e of scrollable) e.scrollTop += Math.max(1, e.clientHeight * .8);
-                    return scrollable.map(e => [e.scrollTop, e.scrollHeight, e.clientHeight]);
-                }""")
-                at_bottom = all(top + height >= full - 2 for top, full, height in metrics)
-                current = (frozenset(seen), str(metrics))
-                stable = stable + 1 if current == previous and at_bottom else 0
-                if stable >= 3:
-                    return seen
-                previous = current
-                await page.wait_for_timeout(750)
-            raise ValueError("Archive did not finish loading; README left unchanged.")
+            return await read_archive(archive)
         except Exception:
             diagnostics = ROOT / "artifacts" / "pydle-scraper"
             diagnostics.mkdir(parents=True, exist_ok=True)
@@ -214,6 +199,33 @@ async def fetch_archive():
         finally:
             await browser.close()
 
+
+
+async def read_archive(archive):
+    entries = archive.get_by_role("button").filter(has_text=re.compile(r"Pydle\s*#\s*\d+", re.I))
+    await entries.first.wait_for(state="visible")
+    # Read only archive entries, excluding the current game's header.
+    # Accumulate IDs to support lists that discard offscreen rows.
+    seen = set()
+    previous = None
+    stable = 0
+    for _ in range(100):
+        seen.update(archive_ids("\n".join(await entries.all_text_contents())))
+        metrics = await archive.evaluate("""element => {
+            const scrollable = [...element.querySelectorAll('*')].filter(e =>
+                e.scrollHeight > e.clientHeight &&
+                /auto|scroll/.test(getComputedStyle(e).overflowY));
+            for (const e of scrollable) e.scrollTop += Math.max(1, e.clientHeight * .8);
+            return scrollable.map(e => [e.scrollTop, e.scrollHeight, e.clientHeight]);
+        }""")
+        at_bottom = all(top + height >= full - 2 for top, full, height in metrics)
+        current = (frozenset(seen), str(metrics))
+        stable = stable + 1 if current == previous and at_bottom else 0
+        if stable >= 3:
+            return seen
+        previous = current
+        await page.wait_for_timeout(750)
+    raise ValueError("Archive did not finish loading; README left unchanged.")
 
 def progress_block(results, available, pending=False):
     counts = result_counts(results, available)

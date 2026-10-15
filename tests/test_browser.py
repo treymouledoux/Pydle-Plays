@@ -3,7 +3,7 @@
 import os
 import unittest
 
-from scripts.update_progress import click_control, dismiss_startup_dialogs
+from scripts.update_progress import click_control, dismiss_startup_dialogs, read_archive
 
 
 @unittest.skipUnless(os.getenv("RUN_BROWSER_TESTS"), "Browser tests run after Chromium is installed")
@@ -57,3 +57,42 @@ class PopupTests(unittest.IsolatedAsyncioTestCase):
         await self.page.set_content('<div role="dialog"><h3>Puzzle Archive</h3><button>Pydle #1</button></div>')
         await dismiss_startup_dialogs(self.page)
         self.assertTrue(await self.page.get_by_role('dialog').is_visible())
+
+    async def test_zero_height_headless_ui_wrapper(self):
+        await self.show_help()
+        await self.page.evaluate('''() => {
+            const dialog = document.querySelector('[role=dialog]');
+            dialog.removeAttribute('style');
+            dialog.style.cssText = 'position:relative;height:0';
+            const panel = document.createElement('div');
+            panel.id = 'headlessui-dialog-panel-regression';
+            panel.style.cssText = 'position:fixed;inset:0;z-index:100;background:white';
+            while (dialog.firstChild) panel.append(dialog.firstChild);
+            dialog.append(panel);
+        }''')
+        self.assertFalse(await self.page.get_by_role('dialog').is_visible())
+        self.assertTrue(await self.page.locator('#headlessui-dialog-panel-regression').is_visible())
+        await click_control(self.page, self.page.locator('[aria-haspopup="menu"]'))
+        self.assertEqual(await self.page.locator('[aria-haspopup="menu"]').get_attribute('data-clicked'), 'true')
+
+    async def test_archive_scrolls_to_end_and_excludes_page_header(self):
+        await self.page.set_content('''
+            <h1>Pydle #999</h1>
+            <div role="dialog" style="height:0;position:relative">
+              <div id="headlessui-dialog-panel-archive" style="position:fixed;inset:20px">
+                <h3>Puzzle Archive</h3>
+                <div style="height:200px;overflow-y:auto" id="entries"></div>
+              </div>
+            </div>''')
+        await self.page.evaluate('''() => {
+            const entries = document.querySelector('#entries');
+            for (let i=1; i<=234; i++) {
+                const button = document.createElement('button');
+                button.textContent = `Pydle #${i} 0 chars Unplayed`;
+                button.style.cssText = 'display:block;height:40px';
+                entries.append(button);
+            }
+        }''')
+        ids = await read_archive(self.page.locator('[role="dialog"]'))
+        self.assertEqual(ids, set(range(1, 235)))
+        self.assertTrue(await self.page.locator('#entries').evaluate('e => e.scrollTop + e.clientHeight >= e.scrollHeight - 2'))
