@@ -46,35 +46,88 @@ async def fetch_archive():
         try:
             archive_url = os.getenv("PYDLE_ARCHIVE_URL") or "https://pydle.net"
             await page.goto(archive_url, wait_until="networkidle")
-            # The archive may be a dialog in the game rather than a separate URL.
-            control = page.get_by_role("link", name=re.compile("archive", re.I))
-            if not await control.count():
-                control = page.get_by_role("button", name=re.compile("archive", re.I))
-            if not await control.count():
-                control = page.get_by_text(re.compile(r"^\s*archive\s*$", re.I))
-            if await control.count():
-                await control.first.click()
-            elif archive_url.rstrip("/") == "https://pydle.net":
-                raise ValueError("Archive control not found; set PYDLE_ARCHIVE_URL to the archive URL.")
-            await page.wait_for_function("() => /#\\s*\\d+/.test(document.body.innerText)")
-            # Some archives load more entries as their container scrolls.
+            # Archive controls can be icon buttons with only a tooltip or SVG title.
+            candidates = [
+                page.get_by_role("link", name=re.compile("archive", re.I)),
+                page.get_by_role("button", name=re.compile("archive", re.I)),
+                page.locator('[title*="archive" i], [aria-label*="archive" i], a[href*="archive" i]'),
+                page.get_by_text(re.compile(r"^\s*(?:puzzle\s+)?archive\s*$", re.I)),
+                page.locator('button, a, [role="button"]').filter(
+                    has=page.locator('svg title').filter(has_text=re.compile("archive", re.I))),
+            ]
+            dialog = page.get_by_role("dialog", name=re.compile("Puzzle Archive", re.I))
+            menu_candidates = [
+                page.get_by_role("button", name=re.compile("menu|navigation", re.I)),
+                page.locator('button[title*="menu" i], button[aria-haspopup="menu"], button[aria-controls*="menu" i]'),
+                page.locator('button').filter(has=page.locator('svg.lucide-menu, svg[data-lucide="menu"]')),
+            ]
+            menu_opened = False
+            for _ in range(30):
+                if await dialog.count() and await dialog.first.is_visible():
+                    break
+                clicked = False
+                for candidate in candidates:
+                    for index in range(await candidate.count()):
+                        control = candidate.nth(index)
+                        if await control.is_visible():
+                            await control.click()
+                            clicked = True
+                            break
+                    if clicked:
+                        break
+                if clicked:
+                    await dialog.first.wait_for(state="visible")
+                    break
+                if not menu_opened:
+                    for candidate in menu_candidates:
+                        for index in range(await candidate.count()):
+                            control = candidate.nth(index)
+                            if await control.is_visible():
+                                await control.click()
+                                menu_opened = True
+                                break
+                        if menu_opened:
+                            break
+                await page.wait_for_timeout(500)
+            await dialog.first.wait_for(state="visible", timeout=10000)
+            archive = dialog.first
+            entries = archive.get_by_role("button").filter(has_text=re.compile(r"Pydle\s*#\s*\d+", re.I))
+            await entries.first.wait_for(state="visible")
+            # Read only archive entries, excluding the current game's header.
+            # Accumulate IDs to support lists that discard offscreen rows.
+            seen = set()
             previous = None
             stable = 0
             for _ in range(100):
-                text = await page.locator("body").inner_text()
-                current = archive_ids(text)
-                stable = stable + 1 if current == previous else 0
-                if stable >= 3:
-                    return current
-                previous = current
-                await page.evaluate("""() => {
-                    for (const element of [document.scrollingElement, ...document.querySelectorAll('*')]) {
-                        if (element && element.scrollHeight > element.clientHeight)
-                            element.scrollTop = element.scrollHeight;
-                    }
+                seen.update(archive_ids("\n".join(await entries.all_text_contents())))
+                metrics = await archive.evaluate("""element => {
+                    const scrollable = [...element.querySelectorAll('*')].filter(e =>
+                        e.scrollHeight > e.clientHeight &&
+                        /auto|scroll/.test(getComputedStyle(e).overflowY));
+                    for (const e of scrollable) e.scrollTop += Math.max(1, e.clientHeight * .8);
+                    return scrollable.map(e => [e.scrollTop, e.scrollHeight, e.clientHeight]);
                 }""")
+                at_bottom = all(top + height >= full - 2 for top, full, height in metrics)
+                current = (frozenset(seen), str(metrics))
+                stable = stable + 1 if current == previous and at_bottom else 0
+                if stable >= 3:
+                    return seen
+                previous = current
                 await page.wait_for_timeout(750)
             raise ValueError("Archive did not finish loading; README left unchanged.")
+        except Exception:
+            diagnostics = ROOT / "artifacts" / "pydle-scraper"
+            diagnostics.mkdir(parents=True, exist_ok=True)
+            try:
+                (diagnostics / "page.html").write_text(await page.content())
+                (diagnostics / "page.txt").write_text(await page.locator("body").inner_text())
+                await page.screenshot(path=str(diagnostics / "page.png"), full_page=True)
+                print(f"Scraper failed at {page.url}; page title: {await page.title()}")
+                print("Visible controls:", await page.locator('button, a, [role="button"]').evaluate_all(
+                    "elements => elements.map(e => ({text: e.innerText, title: e.title, label: e.getAttribute('aria-label'), href: e.getAttribute('href')}))"))
+            except Exception as diagnostic_error:
+                print(f"Could not save all diagnostics: {diagnostic_error}")
+            raise
         finally:
             await browser.close()
 
