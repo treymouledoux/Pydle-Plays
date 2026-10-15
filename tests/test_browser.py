@@ -88,11 +88,24 @@ class PopupTests(unittest.IsolatedAsyncioTestCase):
             const entries = document.querySelector('#entries');
             for (let i=1; i<=234; i++) {
                 const button = document.createElement('button');
-                button.textContent = `Pydle #${i} 0 chars Unplayed`;
+                // No text-node spacing: whole-button textContent would turn #1 + 0 into #10.
+                button.innerHTML = `<span>Pydle #${i}</span><span>0 chars</span><span>Unplayed</span>`;
                 button.style.cssText = 'display:block;height:40px';
                 entries.append(button);
             }
         }''')
-        ids = await read_archive(self.page.locator('[role="dialog"]'))
+        ids = await read_archive(self.page.locator('[role="dialog"]'), poll_interval=0.01)
         self.assertEqual(ids, set(range(1, 235)))
         self.assertTrue(await self.page.locator('#entries').evaluate('e => e.scrollTop + e.clientHeight >= e.scrollHeight - 2'))
+
+    async def test_zero_size_button_with_visible_absolute_svg(self):
+        await self.show_help()
+        await self.page.evaluate('''() => {
+            const button = document.querySelector('[role=dialog] button');
+            button.style.cssText = 'display:inline-block;width:0;height:0;padding:0;border:0';
+            button.querySelector('svg').style.cssText = 'position:absolute;top:8px;right:8px;width:24px;height:24px';
+        }''')
+        self.assertFalse(await self.page.locator('[role=dialog] button').is_visible())
+        self.assertTrue(await self.page.locator('[role=dialog] button svg').is_visible())
+        await click_control(self.page, self.page.locator('[aria-haspopup="menu"]'))
+        self.assertEqual(await self.page.locator('[aria-haspopup="menu"]').get_attribute('data-clicked'), 'true')

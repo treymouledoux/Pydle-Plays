@@ -1,8 +1,10 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import AsyncMock, Mock, patch
 
 from scripts.update_progress import archive_ids, chart_svg, attempt_ids, completed_ids, progress_block, game_results, result_counts
+from scripts.update_progress import read_archive
 
 
 class ProgressTests(unittest.TestCase):
@@ -42,17 +44,48 @@ class ProgressTests(unittest.TestCase):
             self.assertEqual(results[1]['best'], 124)
             self.assertEqual(results[2]['best'], 125)
             self.assertEqual([results[i]['status'] for i in range(1, 7)],
-                             ['Hard', 'Easy only', 'Incomplete', 'Incomplete', 'Incomplete', 'Easy only'])
-            counts = result_counts(results, set(range(1, 8)))
-            self.assertEqual(counts, {'Hard': 1, 'Easy only': 2, 'Incomplete': 3, 'Unattempted': 1})
-            block = progress_block(results, set(range(1, 8)))
+                             ['Hard', 'Easy only', 'Incomplete', 'Broken', 'Incomplete', 'Easy only'])
+            counts = result_counts(results, 7)
+            self.assertEqual(counts, {'Hard': 1, 'Easy only': 2, 'Broken': 1, 'Incomplete': 3})
+            block = progress_block(results, 7)
             self.assertIn('**3 / 7 games completed**', block)
             self.assertIn('**6 attempted**', block)
-            self.assertIn('(1 broken)', block)
+            self.assertIn('**1 broken**', block)
             import xml.etree.ElementTree as ET
             chart = chart_svg(counts)
             ET.fromstring(chart)
-            self.assertIn('Hard: 1, Easy only: 2, Incomplete: 3, Unattempted: 1', chart)
+            self.assertIn('Hard: 1, Easy only: 2, Broken: 1, Incomplete: 3', chart)
+
+    def test_repo_ids_do_not_depend_on_archive_ids(self):
+        results = {9999: {"best": 100, "status": "Hard", "broken": False}}
+        counts = result_counts(results, 234)
+        self.assertEqual(counts, {"Hard": 1, "Easy only": 0, "Broken": 0, "Incomplete": 233})
+        self.assertIn('#9999', progress_block(results, 234))
+        for color in ['#3b82f6', '#22c55e', '#eab308', '#ef4444']:
+            self.assertIn(color, chart_svg(counts))
+
+
+
+class ArchiveReadTests(unittest.IsolatedAsyncioTestCase):
+    async def test_reads_until_scroll_position_and_entries_stabilize(self):
+        entries = Mock()
+        entries.first.wait_for = AsyncMock()
+        labels = Mock()
+        entries.get_by_text.return_value = labels
+        labels.all_text_contents = AsyncMock(side_effect=[
+            ['Pydle #1'], ['Pydle #1', 'Pydle #2'],
+            ['Pydle #1', 'Pydle #2'], ['Pydle #1', 'Pydle #2'],
+            ['Pydle #1', 'Pydle #2'],
+        ])
+        archive = Mock()
+        archive.get_by_role.return_value.filter.return_value = entries
+        archive.evaluate = AsyncMock(side_effect=[
+            [[50, 200, 100]], [[100, 200, 100]], [[100, 200, 100]],
+            [[100, 200, 100]], [[100, 200, 100]],
+        ])
+        with patch('scripts.update_progress.asyncio.sleep', new_callable=AsyncMock):
+            self.assertEqual(await read_archive(archive), {1, 2})
+        self.assertEqual(archive.evaluate.await_count, 5)
 
 
 if __name__ == '__main__':

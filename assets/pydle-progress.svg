@@ -1,12 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="640" height="280" viewBox="0 0 640 280" role="img" aria-labelledby="title desc">
 <title id="title">My Pydle Plays</title>
-<desc id="desc">Hard: 9, Easy only: 10, Incomplete: 2</desc>
+<desc id="desc">Hard: 9, Easy only: 10, Broken: 2, Incomplete: 213</desc>
 <rect width="640" height="280" rx="18" fill="#0f172a"/>
 <text x="280" y="60" font-family="sans-serif" font-size="24" fill="white">My Pydle Plays</text>
-<path d="M 140 140 L 140.0000 40.0000 A 100 100 0 0 1 183.3884 230.0969 Z" fill="#8b5cf6"/>
-<circle cx="290" cy="95" r="6" fill="#8b5cf6"/><text x="308" y="100" font-family="sans-serif" font-size="16" fill="white">Hard: 9</text>
-<path d="M 140 140 L 183.3884 230.0969 A 100 100 0 0 1 83.6680 57.3761 Z" fill="#22c55e"/>
+<path d="M 140 140 L 140.0000 40.0000 A 100 100 0 0 1 163.9316 42.9058 Z" fill="#3b82f6"/>
+<circle cx="290" cy="95" r="6" fill="#3b82f6"/><text x="308" y="100" font-family="sans-serif" font-size="16" fill="white">Hard: 9</text>
+<path d="M 140 140 L 163.9316 42.9058 A 100 100 0 0 1 188.8328 52.7340 Z" fill="#22c55e"/>
 <circle cx="290" cy="125" r="6" fill="#22c55e"/><text x="308" y="130" font-family="sans-serif" font-size="16" fill="white">Easy only: 10</text>
-<path d="M 140 140 L 83.6680 57.3761 A 100 100 0 0 1 140.0000 40.0000 Z" fill="#f59e0b"/>
-<circle cx="290" cy="155" r="6" fill="#f59e0b"/><text x="308" y="160" font-family="sans-serif" font-size="16" fill="white">Incomplete: 2</text>
-<text x="280" y="240" font-family="sans-serif" font-size="16" fill="#cbd5e1">Archive sync pending</text></svg>
+<path d="M 140 140 L 188.8328 52.7340 A 100 100 0 0 1 193.4466 55.4810 Z" fill="#eab308"/>
+<circle cx="290" cy="155" r="6" fill="#eab308"/><text x="308" y="160" font-family="sans-serif" font-size="16" fill="white">Broken: 2</text>
+<path d="M 140 140 L 193.4466 55.4810 A 100 100 0 1 1 140.0000 40.0000 Z" fill="#ef4444"/>
+<circle cx="290" cy="185" r="6" fill="#ef4444"/><text x="308" y="190" font-family="sans-serif" font-size="16" fill="white">Incomplete: 213</text>
+<text x="280" y="240" font-family="sans-serif" font-size="16" fill="#cbd5e1">8.1% completed</text></svg>

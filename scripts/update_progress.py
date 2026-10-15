@@ -62,14 +62,17 @@ def game_results(directory):
                 game["best"] = score
     for game in results.values():
         score = game["best"]
-        game["status"] = "Hard" if score is not None and score < 125 else "Easy only" if score is not None and score < 250 else "Incomplete"
+        game["status"] = "Hard" if score is not None and score < 125 else "Easy only" if score is not None and score < 250 else "Broken" if game["broken"] else "Incomplete"
     return results
 
 
-def result_counts(results, available):
-    counts = {name: 0 for name in ("Hard", "Easy only", "Incomplete", "Unattempted")}
-    for number in available:
-        counts[results[number]["status"] if number in results else "Unattempted"] += 1
+def result_counts(results, total):
+    if total < len(results):
+        raise ValueError("Archive total is smaller than the number of repo games; check scraper diagnostics.")
+    counts = {name: 0 for name in ("Hard", "Easy only", "Broken", "Incomplete")}
+    for result in results.values():
+        counts[result["status"]] += 1
+    counts["Incomplete"] += total - len(results)
     return counts
 
 
@@ -94,7 +97,13 @@ async def dismiss_startup_dialogs(page):
         print("Dismissing startup dialog:", (await dialog.inner_text())[:500])
         if await dialog.get_by_role("heading", name="How to play Pydle", exact=True).count():
             # The captured page has one unlabeled button inside this dialog: X.
-            await dialog.locator('button:not([data-headlessui-focus-guard])').click(timeout=5000)
+            close = dialog.locator('button:not([data-headlessui-focus-guard])')
+            # Its absolutely positioned SVG is visible even when the button has no box.
+            icon = close.locator('svg')
+            if await icon.count() and await icon.first.is_visible():
+                await icon.first.click(timeout=5000)
+            else:
+                await close.click(timeout=5000)
             await surface.wait_for(state="hidden", timeout=5000)
             continue
         await page.keyboard.press("Escape")
@@ -182,7 +191,7 @@ async def fetch_archive():
                 await page.wait_for_timeout(500)
             await dialog.first.get_by_role("heading", name=re.compile("Puzzle Archive", re.I)).wait_for(state="visible", timeout=10000)
             archive = dialog.first
-            return await read_archive(archive)
+            return len(await read_archive(archive))
         except Exception:
             diagnostics = ROOT / "artifacts" / "pydle-scraper"
             diagnostics.mkdir(parents=True, exist_ok=True)
@@ -201,16 +210,17 @@ async def fetch_archive():
 
 
 
-async def read_archive(archive):
+async def read_archive(archive, poll_interval=0.75):
     entries = archive.get_by_role("button").filter(has_text=re.compile(r"Pydle\s*#\s*\d+", re.I))
     await entries.first.wait_for(state="visible")
+    labels = entries.get_by_text(re.compile(r"^\s*Pydle\s*#\s*\d+\s*$", re.I))
     # Read only archive entries, excluding the current game's header.
     # Accumulate IDs to support lists that discard offscreen rows.
     seen = set()
     previous = None
     stable = 0
     for _ in range(100):
-        seen.update(archive_ids("\n".join(await entries.all_text_contents())))
+        seen.update(archive_ids("\n".join(await labels.all_text_contents())))
         metrics = await archive.evaluate("""element => {
             const scrollable = [...element.querySelectorAll('*')].filter(e =>
                 e.scrollHeight > e.clientHeight &&
@@ -224,35 +234,30 @@ async def read_archive(archive):
         if stable >= 3:
             return seen
         previous = current
-        await page.wait_for_timeout(750)
+        await asyncio.sleep(poll_interval)
     raise ValueError("Archive did not finish loading; README left unchanged.")
 
-def progress_block(results, available, pending=False):
-    counts = result_counts(results, available)
+def progress_block(results, total, pending=False):
+    counts = result_counts(results, total)
     completed = counts["Hard"] + counts["Easy only"]
-    attempted = len(available) - counts["Unattempted"]
-    broken = sum(result["broken"] and result["status"] == "Incomplete"
-                 for number, result in results.items() if number in available)
-    total = len(available)
+    attempted = len(results)
     summary = f"**{completed} games completed**" if pending else f"**{completed} / {total} games completed** · **{completed / total * 100:.1f}%**"
     chart = "![Pydle pie chart](assets/pydle-progress.svg)"
     rows = ["| Game | Best saved score | Result |", "| --- | ---: | --- |"]
     for number, result in sorted(results.items()):
-        if number not in available:
-            continue
         score = result["best"] if result["best"] is not None else "—"
-        status = result["status"] + (" (broken)" if result["broken"] and result["status"] == "Incomplete" else "")
+        status = result["status"]
         rows.append(f"| #{number} | {score} | {status} |")
-    note = "\n\nArchive percentage and unattempted games will appear after the first successful update." if pending else ""
+    note = "\n\nArchive percentage and remaining incomplete games will appear after the first successful update." if pending else ""
     return (f"{START}\n{summary} · **{attempted} attempted**\n\n"
             f"**{counts['Hard']} hard** · **{counts['Easy only']} easy only** · "
-            f"**{counts['Incomplete']} incomplete** ({broken} broken)\n\n{chart}{note}\n\n"
+            f"**{counts['Broken']} broken** · **{counts['Incomplete']} incomplete**\n\n{chart}{note}\n\n"
             + "\n".join(rows) + f"\n{END}")
 
 
 def chart_svg(counts, pending=False):
-    colors = {"Hard": "#8b5cf6", "Easy only": "#22c55e", "Incomplete": "#f59e0b", "Unattempted": "#475569"}
-    slices = [(name, value, colors[name]) for name, value in counts.items() if not (pending and name == "Unattempted")]
+    colors = {"Hard": "#3b82f6", "Easy only": "#22c55e", "Broken": "#eab308", "Incomplete": "#ef4444"}
+    slices = [(name, value, colors[name]) for name, value in counts.items()]
     completed = counts["Hard"] + counts["Easy only"]
     total = sum(value for _, value, _ in slices)
     description = ', '.join(f'{name}: {value}' for name, value, _ in slices)
@@ -279,16 +284,16 @@ def chart_svg(counts, pending=False):
     return '\n'.join(parts) + '\n'
 
 
-def update_readme(available):
+def update_readme(total):
     path = ROOT / "README.md"
     text = path.read_text()
     if text.count(START) != 1 or text.count(END) != 1 or text.index(START) >= text.index(END):
         raise ValueError("README needs one ordered pair of progress markers.")
     results = game_results(ROOT / "games")
-    block = progress_block(results, available)
+    block = progress_block(results, total)
     chart = ROOT / "assets" / "pydle-progress.svg"
     chart.parent.mkdir(exist_ok=True)
-    chart.write_text(chart_svg(result_counts(results, available)))
+    chart.write_text(chart_svg(result_counts(results, total)))
     before, rest = text.split(START)
     _, after = rest.split(END)
     path.write_text(before + block + after)
