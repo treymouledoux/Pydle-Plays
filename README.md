@@ -1,4 +1,4 @@
-# My Pydle Plays
+# Pydle Stats
 
 My attempts at [Pydle](https://pydle.net), one Python puzzle at a time 🐍
 

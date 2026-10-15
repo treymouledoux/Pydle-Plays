@@ -256,10 +256,10 @@ def chart_svg(counts, pending=False):
     total = sum(value for _, value, _ in slices)
     description = ', '.join(f'{name}: {value}' for name, value, _ in slices)
     parts = ['<svg xmlns="http://www.w3.org/2000/svg" width="640" height="280" viewBox="0 0 640 280" role="img" aria-labelledby="title desc">',
-             '<title id="title">My Pydle Plays</title>',
+             '<title id="title">Pydle Stats</title>',
              f'<desc id="desc">{description}</desc>',
              '<rect width="640" height="280" rx="18" fill="#0f172a"/>',
-             '<text x="280" y="60" font-family="sans-serif" font-size="24" fill="white">My Pydle Plays</text>']
+             '<text x="280" y="60" font-family="sans-serif" font-size="24" fill="white">Pydle Stats</text>']
     angle = -math.pi / 2
     for index, (name, value, color) in enumerate(slices):
         if value and total:
@@ -274,7 +274,8 @@ def chart_svg(counts, pending=False):
         y = 100 + index * 30
         parts.append(f'<circle cx="290" cy="{y-5}" r="6" fill="{color}"/><text x="308" y="{y}" font-family="sans-serif" font-size="16" fill="white">{name}: {value}</text>')
     note = 'Archive sync pending' if pending else f'{completed / total * 100:.1f}% completed' if total else 'No games yet'
-    parts.append(f'<text x="280" y="240" font-family="sans-serif" font-size="16" fill="#cbd5e1">{note}</text></svg>')
+    parts.append(f'<text x="280" y="240" font-family="sans-serif" font-size="16" fill="#cbd5e1">{note}</text>')
+    parts.append('<text x="620" y="265" text-anchor="end" font-family="sans-serif" font-size="11" fill="#94a3b8">Made by Trey Mouledoux</text></svg>')
     return '\n'.join(parts) + '\n'
 
 
