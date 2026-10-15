@@ -5,7 +5,6 @@ import math
 import os
 from pathlib import Path
 import re
-from urllib.parse import quote
 
 ROOT = Path(__file__).resolve().parents[1]
 START = "<!-- pydle-progress:start -->"
@@ -37,6 +36,70 @@ def attempt_ids(directory):
     return ids, broken - ids
 
 
+def game_results(directory):
+    """Use recorded Pydle scores only when the attempt includes saved code."""
+    results = {}
+    header = re.compile(r"^\s*#.*?(\d+)\s*/\s*(?:250|125)\b.*$", re.M)
+    for path in sorted(directory.glob("*.py")):
+        match = re.match(r"#(\d+)\b", path.name)
+        if not match:
+            continue
+        game = results.setdefault(int(match[1]), {"best": None, "broken": False})
+        text = path.read_text()
+        headers = list(header.finditer(text))
+        file_broken = "(broken)" in path.stem.casefold()
+        game["broken"] |= file_broken
+        for index, section in enumerate(headers):
+            end = headers[index + 1].start() if index + 1 < len(headers) else len(text)
+            code = text[section.end():end]
+            if not any(line.strip() and not line.lstrip().startswith('#') for line in code.splitlines()):
+                continue
+            if file_broken or "broken" in section[0].casefold():
+                game["broken"] = True
+                continue
+            score = int(section[1])
+            if game["best"] is None or score < game["best"]:
+                game["best"] = score
+    for game in results.values():
+        score = game["best"]
+        game["status"] = "Hard" if score is not None and score < 125 else "Easy only" if score is not None and score < 250 else "Incomplete"
+    return results
+
+
+def result_counts(results, available):
+    counts = {name: 0 for name in ("Hard", "Easy only", "Incomplete", "Unattempted")}
+    for number in available:
+        counts[results[number]["status"] if number in results else "Unattempted"] += 1
+    return counts
+
+
+async def dismiss_startup_dialogs(page):
+    """Headless UI dialogs cover the menu on a browser's first visit."""
+    dialogs = page.get_by_role("dialog")
+    for _ in range(5):
+        visible = [dialogs.nth(i) for i in range(await dialogs.count())
+                   if await dialogs.nth(i).is_visible()]
+        if not visible:
+            return
+        dialog = visible[-1]
+        if await dialog.get_by_role("heading", name=re.compile("Puzzle Archive", re.I)).count():
+            return
+        print("Dismissing startup dialog:", (await dialog.inner_text())[:500])
+        await page.keyboard.press("Escape")
+        try:
+            await dialog.wait_for(state="hidden", timeout=2000)
+            continue
+        except Exception:
+            close = dialog.get_by_role("button", name=re.compile(r"close|dismiss|got it|start|okay|^ok$", re.I))
+            if not await close.count():
+                close = dialog.locator('button[title*="close" i]')
+            if not await close.count():
+                raise ValueError("Startup dialog could not be dismissed; see scraper diagnostics.")
+            await close.first.click(timeout=5000)
+            await dialog.wait_for(state="hidden", timeout=5000)
+    raise ValueError("Too many startup dialogs; see scraper diagnostics.")
+
+
 async def fetch_archive():
     from playwright.async_api import async_playwright
 
@@ -63,6 +126,7 @@ async def fetch_archive():
             ]
             menu_opened = False
             for _ in range(30):
+                await dismiss_startup_dialogs(page)
                 if await dialog.count() and await dialog.first.is_visible():
                     break
                 clicked = False
@@ -70,7 +134,7 @@ async def fetch_archive():
                     for index in range(await candidate.count()):
                         control = candidate.nth(index)
                         if await control.is_visible():
-                            await control.click()
+                            await control.click(timeout=5000)
                             clicked = True
                             break
                     if clicked:
@@ -83,7 +147,7 @@ async def fetch_archive():
                         for index in range(await candidate.count()):
                             control = candidate.nth(index)
                             if await control.is_visible():
-                                await control.click()
+                                await control.click(timeout=5000)
                                 menu_opened = True
                                 break
                         if menu_opened:
@@ -132,30 +196,33 @@ async def fetch_archive():
             await browser.close()
 
 
-def progress_block(completed, available, broken=frozenset()):
-    count = len(completed & available)
-    broken_count = len((broken - completed) & available)
+def progress_block(results, available, pending=False):
+    counts = result_counts(results, available)
+    completed = counts["Hard"] + counts["Easy only"]
+    attempted = len(available) - counts["Unattempted"]
+    broken = sum(result["broken"] and result["status"] == "Incomplete"
+                 for number, result in results.items() if number in available)
     total = len(available)
-    unattempted = total - count - broken_count
-    percent = count / total * 100
-    filled = round(percent / 5)
-    badge = quote(f"{count}/{total} ({percent:.1f}%)", safe="")
-    return f"""{START}
-![Pydle progress](https://img.shields.io/badge/Pydle-{badge}-8b5cf6?style=for-the-badge)
+    summary = f"**{completed} games completed**" if pending else f"**{completed} / {total} games completed** · **{completed / total * 100:.1f}%**"
+    chart = "![Pydle pie chart](assets/pydle-progress.svg)"
+    rows = ["| Game | Best saved score | Result |", "| --- | ---: | --- |"]
+    for number, result in sorted(results.items()):
+        if number not in available:
+            continue
+        score = result["best"] if result["best"] is not None else "—"
+        status = result["status"] + (" (broken)" if result["broken"] and result["status"] == "Incomplete" else "")
+        rows.append(f"| #{number} | {score} | {status} |")
+    note = "\n\nArchive percentage and unattempted games will appear after the first successful update." if pending else ""
+    return (f"{START}\n{summary} · **{attempted} attempted**\n\n"
+            f"**{counts['Hard']} hard** · **{counts['Easy only']} easy only** · "
+            f"**{counts['Incomplete']} incomplete** ({broken} broken)\n\n{chart}{note}\n\n"
+            + "\n".join(rows) + f"\n{END}")
 
-`{'█' * filled}{'░' * (20 - filled)}` **{percent:.1f}%**
 
-**{count} / {total} games completed** · **{count + broken_count} attempted** · **{broken_count} broken**
-
-![Pydle pie chart](assets/pydle-progress.svg)
-{END}"""
-
-
-def chart_svg(completed, broken, unattempted, pending=False):
-    slices = [("Completed", completed, "#8b5cf6"),
-              ("Broken attempts", broken, "#f59e0b")]
-    if not pending:
-        slices.append(("Unattempted", unattempted, "#475569"))
+def chart_svg(counts, pending=False):
+    colors = {"Hard": "#8b5cf6", "Easy only": "#22c55e", "Incomplete": "#f59e0b", "Unattempted": "#475569"}
+    slices = [(name, value, colors[name]) for name, value in counts.items() if not (pending and name == "Unattempted")]
+    completed = counts["Hard"] + counts["Easy only"]
     total = sum(value for _, value, _ in slices)
     description = ', '.join(f'{name}: {value}' for name, value, _ in slices)
     parts = ['<svg xmlns="http://www.w3.org/2000/svg" width="640" height="280" viewBox="0 0 640 280" role="img" aria-labelledby="title desc">',
@@ -174,7 +241,7 @@ def chart_svg(completed, broken, unattempted, pending=False):
                 x2, y2 = 140 + 100 * math.cos(end), 140 + 100 * math.sin(end)
                 parts.append(f'<path d="M 140 140 L {x1:.4f} {y1:.4f} A 100 100 0 {int(value / total > .5)} 1 {x2:.4f} {y2:.4f} Z" fill="{color}"/>')
             angle = end
-        y = 110 + index * 34
+        y = 100 + index * 30
         parts.append(f'<circle cx="290" cy="{y-5}" r="6" fill="{color}"/><text x="308" y="{y}" font-family="sans-serif" font-size="16" fill="white">{name}: {value}</text>')
     note = 'Archive sync pending' if pending else f'{completed / total * 100:.1f}% completed' if total else 'No games yet'
     parts.append(f'<text x="280" y="240" font-family="sans-serif" font-size="16" fill="#cbd5e1">{note}</text></svg>')
@@ -186,13 +253,11 @@ def update_readme(available):
     text = path.read_text()
     if text.count(START) != 1 or text.count(END) != 1 or text.index(START) >= text.index(END):
         raise ValueError("README needs one ordered pair of progress markers.")
-    completed, broken = attempt_ids(ROOT / "games")
-    block = progress_block(completed, available, broken)
-    count = len(completed & available)
-    broken_count = len(broken & available)
+    results = game_results(ROOT / "games")
+    block = progress_block(results, available)
     chart = ROOT / "assets" / "pydle-progress.svg"
     chart.parent.mkdir(exist_ok=True)
-    chart.write_text(chart_svg(count, broken_count, len(available) - count - broken_count))
+    chart.write_text(chart_svg(result_counts(results, available)))
     before, rest = text.split(START)
     _, after = rest.split(END)
     path.write_text(before + block + after)
