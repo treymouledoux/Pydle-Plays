@@ -243,16 +243,14 @@ def progress_block(results, total, pending=False):
     attempted = len(results)
     summary = f"**{completed} games completed**" if pending else f"**{completed} / {total} games completed** · **{completed / total * 100:.1f}%**"
     chart = "![Pydle pie chart](assets/pydle-progress.svg)"
-    rows = ["| Game | Best saved score | Result |", "| --- | ---: | --- |"]
-    for number, result in sorted(results.items()):
-        score = result["best"] if result["best"] is not None else "—"
-        status = result["status"]
-        rows.append(f"| #{number} | {score} | {status} |")
+    scores = [result["best"] for result in results.values()
+              if result["status"] in ("Hard", "Easy only")]
+    average = f"{sum(scores) / len(scores):.1f}" if scores else "—"
     note = "\n\nArchive percentage and remaining incomplete games will appear after the first successful update." if pending else ""
     return (f"{START}\n{summary} · **{attempted} attempted**\n\n"
             f"**{counts['Hard']} hard** · **{counts['Easy only']} easy only** · "
-            f"**{counts['Broken']} broken** · **{counts['Incomplete']} incomplete**\n\n{chart}{note}\n\n"
-            + "\n".join(rows) + f"\n{END}")
+            f"**{counts['Broken']} broken** · **{counts['Incomplete']} incomplete**\n\n"
+            f"**Average best score: {average} characters** across completed games\n\n{chart}{note}\n{END}")
 
 
 def chart_svg(counts, pending=False):

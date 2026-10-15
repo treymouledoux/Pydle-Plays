@@ -51,6 +51,8 @@ class ProgressTests(unittest.TestCase):
             self.assertIn('**3 / 7 games completed**', block)
             self.assertIn('**6 attempted**', block)
             self.assertIn('**1 broken**', block)
+            self.assertIn('Average best score: 166.0 characters', block)
+            self.assertNotIn('| Game |', block)
             import xml.etree.ElementTree as ET
             chart = chart_svg(counts)
             ET.fromstring(chart)
@@ -60,7 +62,7 @@ class ProgressTests(unittest.TestCase):
         results = {9999: {"best": 100, "status": "Hard", "broken": False}}
         counts = result_counts(results, 234)
         self.assertEqual(counts, {"Hard": 1, "Easy only": 0, "Broken": 0, "Incomplete": 233})
-        self.assertIn('#9999', progress_block(results, 234))
+        self.assertIn('**1 attempted**', progress_block(results, 234))
         for color in ['#3b82f6', '#22c55e', '#eab308', '#ef4444']:
             self.assertIn(color, chart_svg(counts))
 
