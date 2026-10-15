@@ -75,7 +75,7 @@ def result_counts(results, available):
 
 async def dismiss_startup_dialogs(page):
     """Headless UI dialogs cover the menu on a browser's first visit."""
-    dialogs = page.get_by_role("dialog")
+    dialogs = page.locator('[role="dialog"]')
     for _ in range(5):
         visible = [dialogs.nth(i) for i in range(await dialogs.count())
                    if await dialogs.nth(i).is_visible()]
@@ -85,6 +85,11 @@ async def dismiss_startup_dialogs(page):
         if await dialog.get_by_role("heading", name=re.compile("Puzzle Archive", re.I)).count():
             return
         print("Dismissing startup dialog:", (await dialog.inner_text())[:500])
+        if await dialog.get_by_role("heading", name="How to play Pydle", exact=True).count():
+            # The captured page has one unlabeled button inside this dialog: X.
+            await dialog.locator('button:not([data-headlessui-focus-guard])').click(timeout=5000)
+            await dialog.wait_for(state="hidden", timeout=5000)
+            continue
         await page.keyboard.press("Escape")
         try:
             await dialog.wait_for(state="hidden", timeout=2000)
@@ -98,6 +103,20 @@ async def dismiss_startup_dialogs(page):
             await close.first.click(timeout=5000)
             await dialog.wait_for(state="hidden", timeout=5000)
     raise ValueError("Too many startup dialogs; see scraper diagnostics.")
+
+
+async def click_control(page, control):
+    from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+
+    for attempt in range(3):
+        await dismiss_startup_dialogs(page)
+        try:
+            await control.click(timeout=2000)
+            return
+        except PlaywrightTimeoutError:
+            # A first-visit popup may mount between the check and the click.
+            if attempt == 2:
+                raise
 
 
 async def fetch_archive():
@@ -134,7 +153,7 @@ async def fetch_archive():
                     for index in range(await candidate.count()):
                         control = candidate.nth(index)
                         if await control.is_visible():
-                            await control.click(timeout=5000)
+                            await click_control(page, control)
                             clicked = True
                             break
                     if clicked:
@@ -147,7 +166,7 @@ async def fetch_archive():
                         for index in range(await candidate.count()):
                             control = candidate.nth(index)
                             if await control.is_visible():
-                                await control.click(timeout=5000)
+                                await click_control(page, control)
                                 menu_opened = True
                                 break
                         if menu_opened:
