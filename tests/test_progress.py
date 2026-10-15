@@ -32,9 +32,9 @@ class ProgressTests(unittest.TestCase):
             self.assertEqual(results[1]['best'], 124)
             self.assertEqual(results[2]['best'], 125)
             self.assertEqual([results[i]['status'] for i in range(1, 7)],
-                             ['Hard', 'Easy only', 'Incomplete', 'Broken', 'Incomplete', 'Easy only'])
+                             ['Hard', 'Easy only', 'Unattempted', 'Broken', 'Unattempted', 'Easy only'])
             counts = result_counts(results, 7)
-            self.assertEqual(counts, {'Hard': 1, 'Easy only': 2, 'Broken': 1, 'Incomplete': 3})
+            self.assertEqual(counts, {'Hard': 1, 'Easy only': 2, 'Broken': 1, 'Unattempted': 3})
             block = progress_block(results, 7)
             self.assertIn('**3 / 7 games completed**', block)
             self.assertIn('**6 attempted**', block)
@@ -44,12 +44,12 @@ class ProgressTests(unittest.TestCase):
             import xml.etree.ElementTree as ET
             chart = chart_svg(counts)
             ET.fromstring(chart)
-            self.assertIn('Hard: 1, Easy only: 2, Broken: 1, Incomplete: 3', chart)
+            self.assertIn('Hard: 1, Easy only: 2, Broken: 1, Unattempted: 3', chart)
 
     def test_repo_ids_do_not_depend_on_archive_ids(self):
         results = {9999: {"best": 100, "status": "Hard", "broken": False}}
         counts = result_counts(results, 234)
-        self.assertEqual(counts, {"Hard": 1, "Easy only": 0, "Broken": 0, "Incomplete": 233})
+        self.assertEqual(counts, {"Hard": 1, "Easy only": 0, "Broken": 0, "Unattempted": 233})
         self.assertIn('**1 attempted**', progress_block(results, 234))
         for color in ['#3b82f6', '#22c55e', '#eab308', '#ef4444']:
             self.assertIn(color, chart_svg(counts))

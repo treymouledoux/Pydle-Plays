@@ -46,17 +46,17 @@ def game_results(directory):
                 game["best"] = score
     for game in results.values():
         score = game["best"]
-        game["status"] = "Hard" if score is not None and score < 125 else "Easy only" if score is not None and score < 250 else "Broken" if game["broken"] else "Incomplete"
+        game["status"] = "Hard" if score is not None and score < 125 else "Easy only" if score is not None and score < 250 else "Broken" if game["broken"] else "Unattempted"
     return results
 
 
 def result_counts(results, total):
     if total < len(results):
         raise ValueError("Archive total is smaller than the number of repo games; check scraper diagnostics.")
-    counts = {name: 0 for name in ("Hard", "Easy only", "Broken", "Incomplete")}
+    counts = {name: 0 for name in ("Hard", "Easy only", "Broken", "Unattempted")}
     for result in results.values():
         counts[result["status"]] += 1
-    counts["Incomplete"] += total - len(results)
+    counts["Unattempted"] += total - len(results)
     return counts
 
 
@@ -229,15 +229,15 @@ def progress_block(results, total, pending=False):
     scores = [result["best"] for result in results.values()
               if result["status"] in ("Hard", "Easy only")]
     average = f"{sum(scores) / len(scores):.1f}" if scores else "—"
-    note = "\n\nArchive percentage and remaining incomplete games will appear after the first successful update." if pending else ""
+    note = "\n\nArchive percentage and remaining unattempted games will appear after the first successful update." if pending else ""
     return (f"{START}\n{summary} · **{attempted} attempted**\n\n"
             f"**{counts['Hard']} hard** · **{counts['Easy only']} easy only** · "
-            f"**{counts['Broken']} broken** · **{counts['Incomplete']} incomplete**\n\n"
+            f"**{counts['Broken']} broken** · **{counts['Unattempted']} unattempted**\n\n"
             f"**Average best score: {average} characters** across completed games\n\n{chart}{note}\n{END}")
 
 
 def chart_svg(counts, pending=False):
-    colors = {"Hard": "#3b82f6", "Easy only": "#22c55e", "Broken": "#eab308", "Incomplete": "#ef4444"}
+    colors = {"Hard": "#3b82f6", "Easy only": "#22c55e", "Broken": "#eab308", "Unattempted": "#ef4444"}
     slices = [(name, value, colors[name]) for name, value in counts.items()]
     completed = counts["Hard"] + counts["Easy only"]
     total = sum(value for _, value, _ in slices)
