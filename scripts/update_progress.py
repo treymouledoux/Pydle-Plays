@@ -20,22 +20,6 @@ def archive_ids(text):
     return ids
 
 
-def completed_ids(directory):
-    return attempt_ids(directory)[0]
-
-
-def attempt_ids(directory):
-    """A completed solution takes precedence over a broken attempt for the same ID."""
-    ids = set()
-    broken = set()
-    for path in directory.glob("*.py"):
-        match = re.match(r"#(\d+)\b", path.name)
-        if match:
-            target = broken if "(broken)" in path.stem.casefold() else ids
-            target.add(int(match[1]))
-    return ids, broken - ids
-
-
 def game_results(directory):
     """Use recorded Pydle scores only when the attempt includes saved code."""
     results = {}
@@ -94,7 +78,7 @@ async def dismiss_startup_dialogs(page):
         surface = await dialog_surface(dialog)
         if await dialog.get_by_role("heading", name=re.compile("Puzzle Archive", re.I)).count():
             return
-        print("Dismissing startup dialog:", (await dialog.inner_text())[:500])
+        print("Dismissing startup dialog")
         if await dialog.get_by_role("heading", name="How to play Pydle", exact=True).count():
             # The captured page has one unlabeled button inside this dialog: X.
             close = dialog.locator('button:not([data-headlessui-focus-guard])')
@@ -200,8 +184,7 @@ async def fetch_archive():
                 (diagnostics / "page.txt").write_text(await page.locator("body").inner_text())
                 await page.screenshot(path=str(diagnostics / "page.png"), full_page=True)
                 print(f"Scraper failed at {page.url}; page title: {await page.title()}")
-                print("Visible controls:", await page.locator('button, a, [role="button"]').evaluate_all(
-                    "elements => elements.map(e => ({text: e.innerText, title: e.title, label: e.getAttribute('aria-label'), href: e.getAttribute('href')}))"))
+                print(f"Saved screenshot and page HTML to {diagnostics}")
             except Exception as diagnostic_error:
                 print(f"Could not save all diagnostics: {diagnostic_error}")
             raise
@@ -295,7 +278,8 @@ def update_readme(total):
     before, rest = text.split(START)
     _, after = rest.split(END)
     path.write_text(before + block + after)
-    print(block)
+    counts = result_counts(results, total)
+    print(f"Updated README and chart: {counts['Hard'] + counts['Easy only']}/{total} completed, {len(results)} attempted")
 
 
 if __name__ == "__main__":

@@ -3,7 +3,7 @@ from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import AsyncMock, Mock, patch
 
-from scripts.update_progress import archive_ids, chart_svg, attempt_ids, completed_ids, progress_block, game_results, result_counts
+from scripts.update_progress import archive_ids, chart_svg, progress_block, game_results, result_counts
 from scripts.update_progress import read_archive
 
 
@@ -14,18 +14,6 @@ class ProgressTests(unittest.TestCase):
     def test_empty_archive_fails(self):
         with self.assertRaises(ValueError):
             archive_ids('Loading…')
-
-    def test_attempts_deduplicate_and_exclude_broken(self):
-        with TemporaryDirectory() as directory:
-            for name in ['#1 Cherry.py', '#1 Other.py', '#2 Mug (broken).py', 'helper.py', '#3.txt']:
-                Path(directory, name).touch()
-            self.assertEqual(completed_ids(Path(directory)), {1})
-
-    def test_completed_solution_replaces_broken_attempt(self):
-        with TemporaryDirectory() as directory:
-            for name in ['#1 Working.py', '#1 Working (broken).py', '#2 Mug (broken).py']:
-                Path(directory, name).touch()
-            self.assertEqual(attempt_ids(Path(directory)), ({1}, {2}))
 
     def test_best_saved_attempt_and_strict_limits(self):
         with TemporaryDirectory() as directory:
