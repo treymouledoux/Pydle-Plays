@@ -31,3 +31,6 @@ python scripts/update_progress.py
 ```
 
 If the archive can't be read, the workflow fails and keeps the previous progress display.
+
+> [!NOTE]
+> The stats calculator and this README are AI-assisted. All Python puzzle attempts in `games/` are written by me.
